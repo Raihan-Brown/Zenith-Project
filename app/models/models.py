@@ -2,7 +2,7 @@ import uuid
 from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from ..database import Base
+from app.database import Base
 
 class User(Base):
     __tablename__ = "users"
@@ -17,14 +17,17 @@ class User(Base):
 class WasteCategory(Base):
     __tablename__ = "waste_categories"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True) # e.g., 'botol_plastik'
+    name = Column(String, unique=True, index=True) # e.g., 'botol', 'kaleng'
     points = Column(Integer, default=0)
 
 class WasteLog(Base):
     __tablename__ = "waste_logs"
     id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String)      # ID Alat (Audit)
+    session_id = Column(String)     # ID Sesi Transaksi (Audit)
     user_id = Column(String, ForeignKey("users.id"))
-    waste_category_id = Column(Integer, ForeignKey("waste_categories.id"))
+    trash_type = Column(String)     # Label Sampah (Audit)
+    confidence_score = Column(Float) # Skor AI (Audit)
     points_earned = Column(Integer)
     timestamp = Column(DateTime, default=datetime.utcnow)
 

@@ -10,86 +10,120 @@ from app.core.config import settings
 class AIEngine:
     def __init__(self):
         self.known_encodings = []
-        self.known_ids = []
+        self.known_nis = []
         self.known_names = []
+        # Folder untuk melihat hasil jepretan kamera saat testing
+        self.debug_folder = "debug"
+        if not os.path.exists(self.debug_folder):
+            os.makedirs(self.debug_folder)
+            
         self.load_faces()
 
     def load_faces(self):
-        """Memuat database wajah dari folder 'faces'"""
+        """Memuat dataset wajah dari folder faces/ dengan format: NIS_Nama_X.jpg"""
         if not os.path.exists("faces"):
             os.makedirs("faces")
+            print("AI Engine: Folder faces dibuat. Silakan masukkan foto dataset.")
             return
         
         for file in os.listdir("faces"):
-            if file.endswith((".jpg", ".png")):
-                # Format file: UUID_Nama.jpg
-                img = face_recognition.load_image_file(f"faces/{file}")
-                encs = face_recognition.face_encodings(img)
-                if encs:
-                    self.known_encodings.append(encs[0])
-                    parts = file.split("_")
-                    self.known_ids.append(parts[0])
-                    self.known_names.append(parts[1].split(".")[0])
-        print(f"AI Engine: {len(self.known_ids)} wajah dimuat.")
+            if file.lower().endswith((".jpg", ".png", ".jpeg")):
+                try:
+                    img = face_recognition.load_image_file(f"faces/{file}")
+                    encs = face_recognition.face_encodings(img)
+                    if encs:
+                        self.known_encodings.append(encs[0])
+                        # Mengambil NIS dari nama file (bagian sebelum underscore pertama)
+                        parts = file.split("_")
+                        self.known_nis.append(parts[0])
+                        self.known_names.append(parts[1] if len(parts) > 1 else "Unknown")
+                except Exception as e:
+                    print(f"Gagal memuat wajah {file}: {e}")
+        print(f"AI Engine: {len(self.known_nis)} wajah berhasil didaftarkan ke sistem.")
 
-    def get_esp_snapshot(self):
-        """Ambil 1 frame dari ESP32-CAM"""
+    def get_esp_snapshot(self, prefix="snap"):
+        """Mengambil satu frame gambar dari ESP32-CAM via HTTP Capture"""
         try:
-            url = f"http://{settings.CAM_IP}/capture"
-            r = requests.get(url, timeout=3)
+            # Menggunakan timestamp unik agar gambar tidak diambil dari cache
+            r = requests.get(f"http://{settings.CAM_IP}/capture?t={int(time.time())}", timeout=5)
             if r.status_code == 200:
                 img_np = np.frombuffer(r.content, np.uint8)
-                return cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+                frame = cv2.imdecode(img_np, cv2.IMREAD_COLOR)
+                
+                # Simpan ke folder debug untuk verifikasi manual saat testing
+                debug_path = os.path.join(self.debug_folder, f"{prefix}_latest.jpg")
+                cv2.imwrite(debug_path, frame)
+                
+                return frame
+            else:
+                print(f"📸 Kamera Error: Status {r.status_code}")
         except Exception as e:
-            print(f"Camera Error: {e}")
-        return None
+            print(f"📸 Kamera Error (Koneksi): {e}")
+            return None
 
-    def face_majority_voting(self, shots=5):
-        """Ambil 5 shot dan gunakan suara terbanyak"""
+    def face_majority_voting(self, shots=3):
+        """Logika Majority Voting: Mengambil beberapa snapshot untuk akurasi tinggi"""
         votes = []
+        print(f"📸 AI: Memulai proses identifikasi wajah ({shots} pengambilan)...")
+        
         for i in range(shots):
-            frame = self.get_esp_snapshot()
+            frame = self.get_esp_snapshot(prefix=f"face_{i}")
             if frame is not None:
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 encs = face_recognition.face_encodings(rgb)
                 if encs:
+                    # Menggunakan toleransi 0.45 agar lebih ketat dan akurat
                     matches = face_recognition.compare_faces(self.known_encodings, encs[0], tolerance=0.45)
                     if True in matches:
                         idx = matches.index(True)
-                        votes.append((self.known_ids[idx], self.known_names[idx]))
-            time.sleep(0.25) # Interval per shot
+                        votes.append((self.known_nis[idx], self.known_names[idx]))
+            time.sleep(0.2) 
 
-        if not votes: return None, None
+        if not votes: 
+            print("❌ AI: Wajah tidak terdeteksi atau tidak dikenali.")
+            return None, None
         
-        # Majority Voting
+        # Mencari hasil yang paling sering muncul (Majority Vote)
         counts = Counter([v[0] for v in votes])
-        winner_id, count = counts.most_common(1)[0]
+        winner_nis, win_count = counts.most_common(1)[0]
+        winner_name = next(v[1] for v in votes if v[0] == winner_nis)
         
-        # Ambil nama dari data voting pertama yang cocok dengan winner_id
-        winner_name = next(v[1] for v in votes if v[0] == winner_id)
-        return winner_id, winner_name
+        print(f"✅ AI: Identitas terkonfirmasi sebagai {winner_name} ({win_count}/{shots} match)")
+        return winner_nis, winner_name
 
     def trash_detect_roboflow(self):
-        """Deteksi sampah via Roboflow Hosted Inference"""
-        frame = self.get_esp_snapshot()
-        if frame is None: return None
+        """Deteksi sampah menggunakan API Roboflow dengan threshold rendah untuk fleksibilitas"""
+        frame = self.get_esp_snapshot(prefix="trash")
+        if frame is None:
+            return None
         
-        # Resize ke 320x320 untuk Roboflow
+        # Optimasi ukuran gambar sebelum dikirim ke cloud agar lebih ringan
         resized = cv2.resize(frame, (320, 320))
-        _, img_encoded = cv2.imencode(".jpg", resized)
+        _, encoded = cv2.imencode(".jpg", resized)
         
-        url = f"https://detect.roboflow.com/{settings.ROBOFLOW_MODEL}?api_key={settings.ROBOFLOW_API_KEY}"
+        # Konfigurasi URL Roboflow dengan confidence threshold 20%
+        url = (
+            f"https://detect.roboflow.com/{settings.ROBOFLOW_MODEL}"
+            f"?api_key={settings.ROBOFLOW_API_KEY}"
+            f"&confidence=0.2" 
+        )
+        
         try:
-            r = requests.post(url, files={"file": img_encoded.tobytes()}, timeout=10)
+            r = requests.post(url, files={"file": encoded.tobytes()}, timeout=10)
             data = r.json()
             preds = data.get("predictions", [])
-            if not preds: return None
             
-            # Ambil objek dengan confidence tertinggi
+            if not preds:
+                print("♻️ AI: Roboflow tidak menemukan objek yang cocok di dalam kotak.")
+                return None
+            
+            # Mengambil prediksi dengan tingkat kepercayaan (confidence) tertinggi
             best = max(preds, key=lambda x: x['confidence'])
+            print(f"♻️ AI: Terdeteksi {best['class']} (Confidence: {best['confidence']:.2f})")
+            
             return {"type": best["class"], "confidence": best["confidence"]}
         except Exception as e:
-            print(f"Roboflow Error: {e}")
+            print(f"❌ Roboflow API Error: {e}")
             return None
 
 ai_engine = AIEngine()
