@@ -37,6 +37,12 @@ class QRTransaction(Base):
     qr_token = Column(String, unique=True, index=True)
     user_id = Column(String, ForeignKey("users.id"))
     points = Column(Integer)
-    status = Column(String, default="PENDING") # PENDING, COMPLETED, EXPIRED
+    status = Column(String, default="PENDING")
     created_at = Column(DateTime, default=datetime.utcnow)
     expired_at = Column(DateTime)
+    # Tambahkan baris ini:
+    scanned_by_admin_id = Column(String, ForeignKey("users.id"), nullable=True) 
+
+    # Tambahkan relationship agar mudah mengambil data user/admin (opsional)
+    user = relationship("User", foreign_keys=[user_id])
+    admin = relationship("User", foreign_keys=[scanned_by_admin_id])

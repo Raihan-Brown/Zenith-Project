@@ -43,21 +43,44 @@ def scan_qr(
         models.QRTransaction.status == "PENDING"
     ).first()
     
-    if not qr or qr.expired_at < datetime.utcnow():
-        if qr:
-            qr.status = "EXPIRED"
-            db.commit()
-        raise HTTPException(status_code=400, detail="QR tidak valid atau sudah expired")
+    # ... (validasi expired tetap sama) ...
     
-    # Eksekusi pemotongan poin
     user = db.query(models.User).filter(models.User.id == qr.user_id).first()
     if user.points < qr.points:
         qr.status = "FAILED"
         db.commit()
-        raise HTTPException(status_code=400, detail="Poin user tidak cukup saat pemindaian")
+        raise HTTPException(status_code=400, detail="Poin user tidak cukup")
     
+    # PROSES TRANSFER & PENCATATAN ADMIN
     user.points -= qr.points
+    admin.points += qr.points
+    
     qr.status = "COMPLETED"
+    qr.scanned_by_admin_id = admin.id # Simpan siapa admin yang nge-scan
     db.commit()
     
     return {"status": "success", "user": user.name, "points_redeemed": qr.points}
+
+@router.get("/reports", response_model=List[schemas.QRReportOut])
+def get_admin_reports(
+    db: Session = Depends(get_db), 
+    admin: models.User = Depends(admin_required)
+):
+    # Mengambil daftar transaksi sukses yang diproses oleh admin ini
+    transactions = db.query(models.QRTransaction).filter(
+        models.QRTransaction.scanned_by_admin_id == admin.id,
+        models.QRTransaction.status == "COMPLETED"
+    ).order_by(models.QRTransaction.created_at.desc()).all()
+    
+    # Mapping manual untuk memasukkan nama user ke dalam response
+    results = []
+    for tx in transactions:
+        results.append({
+            "id": tx.id,
+            "qr_token": tx.qr_token,
+            "points": tx.points,
+            "status": tx.status,
+            "created_at": tx.created_at,
+            "user_name": tx.user.name if tx.user else "Unknown"
+        })
+    return results

@@ -34,3 +34,21 @@ class FaceRecognitionRequest(BaseModel):
 
 class QRGenerate(BaseModel):
     points: int
+
+class LeaderboardOut(BaseModel):
+    name: str
+    points: int
+
+    class Config:
+        from_attributes = True
+
+class QRReportOut(BaseModel):
+    id: int
+    qr_token: str
+    points: int
+    status: str
+    created_at: datetime
+    user_name: str # Menampilkan nama user yang menukar
+
+    class Config:
+        from_attributes = True
