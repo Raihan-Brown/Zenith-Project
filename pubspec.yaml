@@ -1,0 +1,55 @@
+name: zenith_app
+description: A Smart Waste Management Ecosystem mobile application.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Icons Default (Wajib ada biar gak error di iOS/Material)
+  cupertino_icons: ^1.0.6
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+  equatable: ^2.0.5
+  
+  # Navigation
+  go_router: ^12.1.0
+  
+  # Network & Storage
+  dio: ^5.4.0
+  flutter_secure_storage: ^9.0.0
+  jwt_decoder: ^2.0.1 
+  
+  # UI & UX
+  google_fonts: ^6.1.0
+  lottie: ^3.1.0
+  shimmer: ^3.0.0
+  intl: ^0.19.0
+  percent_indicator: ^4.2.3 
+  
+  # QR Features
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^3.5.5
+
+dev_dependencies:
+  # Testing (Harus disini)
+  flutter_test:
+    sdk: flutter
+  
+  # Linter & Code Gen
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+
+flutter:
+  uses-material-design: true
+  # Assets (Uncomment & buat folder assets kalau mau nambah gambar/lottie)
+  # assets:
+  #   - assets/images/
+  #   - assets/animations/
