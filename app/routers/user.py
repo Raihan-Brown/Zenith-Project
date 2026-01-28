@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends
+from requests import Session
 from ..models import models
 from ..dependencies import get_current_user
 from ..schemas import schemas
 from typing import List
+from app.database import get_db
 
 router = APIRouter(prefix="/users", tags=["User"])
 

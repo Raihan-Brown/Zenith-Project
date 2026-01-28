@@ -105,7 +105,7 @@ class AIEngine:
         url = (
             f"https://detect.roboflow.com/{settings.ROBOFLOW_MODEL}"
             f"?api_key={settings.ROBOFLOW_API_KEY}"
-            f"&confidence=0.2" 
+            f"&confidence=0.3" 
         )
         
         try:

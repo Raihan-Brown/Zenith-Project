@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ROBOFLOW_MODEL: str = "deteksi-botol-dan-kaleng-uuytw/1"
     
     # Target ESP32-CAM (Snapshot Endpoint)
-    CAM_IP: str = "10.158.139.86" 
+    CAM_IP: str = "172.27.2.160" 
     
     DATABASE_URL: str = "sqlite:///./zenith_v2.db"
 
