@@ -33,31 +33,37 @@ def generate_qr(
     return {"qr_token": token, "expires_in": 60}
 
 @router.post("/scan")
-def scan_qr(
-    payload: dict, 
-    db: Session = Depends(get_db), 
-    admin: models.User = Depends(admin_required)
-):
+def scan_qr(payload: dict, db: Session = Depends(get_db), admin: models.User = Depends(admin_required)):
     qr_token = payload.get("qr_token")
+    
+    # 1. Cari QR yang PENDING
     qr = db.query(models.QRTransaction).filter(
         models.QRTransaction.qr_token == qr_token,
         models.QRTransaction.status == "PENDING"
     ).first()
     
-    # ... (validasi expired tetap sama) ...
+    # 2. CEK: Apakah QR ketemu? (Mencegah double scan & token palsu)
+    if not qr:
+        raise HTTPException(status_code=404, detail="QR Code tidak valid atau sudah digunakan")
     
+    # 3. CEK: Apakah sudah expired?
+    if datetime.utcnow() > qr.expired_at:
+        qr.status = "EXPIRED" # Tandai biar gak pending terus
+        db.commit()
+        raise HTTPException(status_code=400, detail="QR Code sudah kadaluarsa")
+    
+    # 4. Ambil user owner QR
     user = db.query(models.User).filter(models.User.id == qr.user_id).first()
-    if user.points < qr.points:
+    if not user or user.points < qr.points:
         qr.status = "FAILED"
         db.commit()
         raise HTTPException(status_code=400, detail="Poin user tidak cukup")
     
-    # PROSES TRANSFER & PENCATATAN ADMIN
+    # 5. Eksekusi (Transaction aman)
     user.points -= qr.points
     admin.points += qr.points
-    
     qr.status = "COMPLETED"
-    qr.scanned_by_admin_id = admin.id # Simpan siapa admin yang nge-scan
+    qr.scanned_by_admin_id = admin.id
     db.commit()
     
     return {"status": "success", "user": user.name, "points_redeemed": qr.points}

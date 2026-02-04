@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
+
 class UserBase(BaseModel):
     name: str
     nis: Optional[str] = None
@@ -49,6 +50,16 @@ class QRReportOut(BaseModel):
     status: str
     created_at: datetime
     user_name: str # Menampilkan nama user yang menukar
+
+    class Config:
+        from_attributes = True
+
+class WasteLogOut(BaseModel):
+    id: int
+    trash_type: str
+    points_earned: int
+    timestamp: datetime
+    device_id: str
 
     class Config:
         from_attributes = True

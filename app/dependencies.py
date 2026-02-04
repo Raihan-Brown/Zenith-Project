@@ -28,6 +28,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     return user
 
 def admin_required(current_user: models.User = Depends(get_current_user)):
-    if current_user.role != "ADMIN":
+    if current_user.role.lower() != "admin":
         raise HTTPException(status_code=403, detail="Akses khusus admin")
     return current_user
