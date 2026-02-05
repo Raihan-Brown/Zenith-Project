@@ -7,7 +7,7 @@ class ApiClient {
   final FlutterSecureStorage _storage;
 
   ApiClient(this._storage) : _dio = Dio(BaseOptions(
-    baseUrl: 'http://10.158.139.2:8000/', // Replace with actual IP
+    baseUrl: 'http://192.168.3.104:8000/', // Replace with actual IP
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
   )) {

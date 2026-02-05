@@ -48,18 +48,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final token = await _storage.read(key: 'jwt_token');
       if (token != null && !JwtDecoder.isExpired(token)) {
         await _fetchUserProfile();
+      } else {
+        // Token expired atau tidak ada
+        await logout();
       }
     } catch (e) {
       state = AuthState(isAuthenticated: false);
     }
   }
 
-  // Fungsi Fetch Profile yang lebih kebal
   Future<void> _fetchUserProfile() async {
     try {
+      // [FIX 3.1] Endpoint yang benar sesuai router user.py
       final response = await _apiClient.client.get('/users/me');
       
-      // Langsung parsing pakai Model yang baru
       final user = UserModel.fromJson(response.data);
       
       state = AuthState(
@@ -69,7 +71,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
     } catch (e) {
       print("ERROR FETCH USER: $e");
-      // Kalau gagal fetch user, anggap sesi habis/error, jangan logout paksa tapi kasih tau
       state = state.copyWith(isLoading: false, error: "Gagal memuat data user.");
     }
   }
@@ -78,31 +79,31 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
-      // 1. Request Login ke Backend (Format Form Data)
+      // [FIX 3.2] Ganti FormData menjadi UrlEncoded Form agar diterima FastAPI
       final response = await _apiClient.client.post(
         '/auth/login',
-        data: FormData.fromMap({
+        data: {
           'username': nis, 
           'password': password
-        }), 
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType, // Wajib untuk OAuth2PasswordRequestForm
+        ),
       );
 
-      // 2. Simpan Token
       final token = response.data['access_token'];
       if (token == null) throw Exception("Token tidak ditemukan di response");
       
       await _storage.write(key: 'jwt_token', value: token);
       
-      // 3. Ambil Data User Profile SEBELUM pindah halaman
+      // Ambil profile setelah token tersimpan
       await _fetchUserProfile();
       
-      // 4. Cek apakah user berhasil dimuat?
       if (state.user != null) {
         final role = state.user!.role;
         
         if (!context.mounted) return;
 
-        // Routing berdasarkan Role
         if (role == 'admin') {
           Navigator.pushNamedAndRemoveUntil(context, '/admin-dashboard', (route) => false);
         } else {
@@ -119,7 +120,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       } else if (e.response?.statusCode == 404) {
         msg = "Endpoint login tidak ditemukan";
       } else if (e.response?.statusCode == 422) {
-        msg = "Format data salah (Validation Error)";
+        msg = "Format data salah. Pastikan menggunakan Form UrlEncoded.";
       }
       
       state = state.copyWith(isLoading: false, error: msg);

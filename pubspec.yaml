@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # Icons Default (Wajib ada biar gak error di iOS/Material)
+  # Icons Default
   cupertino_icons: ^1.0.6
 
   # State Management
@@ -38,7 +38,7 @@ dependencies:
   mobile_scanner: ^3.5.5
 
 dev_dependencies:
-  # Testing (Harus disini)
+  # Testing
   flutter_test:
     sdk: flutter
   
@@ -46,10 +46,28 @@ dev_dependencies:
   flutter_lints: ^3.0.0
   build_runner: ^2.4.8
   riverpod_generator: ^2.3.9
+  
+  # [PERBAIKAN 1: TAMBAHKAN INI]
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.10
 
 flutter:
   uses-material-design: true
   # Assets (Uncomment & buat folder assets kalau mau nambah gambar/lottie)
-  # assets:
-  #   - assets/images/
+  assets:
+     - assets/images/
   #   - assets/animations/
+
+# [PERBAIKAN 2: GESER KE KIRI (JANGAN MENJOROK)]
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/logo.jpeg" # Pastikan file ini ada (pake .png lebih aman)
+  min_sdk_android: 21
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: "assets/images/logo.jpeg"
+  android_12:
+    image: "assets/images/logo.jpeg"
+    icon_background_color: "#ffffff"

@@ -16,7 +16,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggingIn = state.uri.toString() == '/login';
       final isAuthenticated = authState.isAuthenticated;
       
-      // PERBAIKAN: Ambil role dari user (karena authState.role mungkin ga ada di versi baru)
+      // Ambil role dari user (sudah di-lowercase di UserModel)
       final userRole = authState.user?.role; 
 
       // Case A: Belum Login -> Tendang ke /login
@@ -26,11 +26,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Case B: Udah Login tapi masih di halaman Login -> Arahkan sesuai Role
       if (isLoggingIn && isAuthenticated) {
-        return userRole == 'ADMIN' ? '/admin' : '/dashboard';
+        // ⚠️ FIX: Ganti 'ADMIN' jadi 'admin' (huruf kecil)
+        return userRole == 'admin' ? '/admin' : '/dashboard';
       }
 
       // Case C: User biasa coba akses halaman Admin -> Balikin ke Dashboard
-      if (state.uri.toString().startsWith('/admin') && userRole != 'ADMIN') {
+      // ⚠️ FIX: Ganti 'ADMIN' jadi 'admin' (huruf kecil)
+      if (state.uri.toString().startsWith('/admin') && userRole != 'admin') {
         return '/dashboard';
       }
 
@@ -49,7 +51,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/admin',
         builder: (context, state) => const AdminDashboard(),
       ),
-      // Nanti tambah route QR scanner disini
     ],
   );
 });

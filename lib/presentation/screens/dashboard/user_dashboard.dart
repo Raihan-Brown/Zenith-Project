@@ -1,82 +1,71 @@
-// lib/presentation/screens/dashboard/user_dashboard.dart
+import 'dart:ui'; // WAJIB ADA untuk efek Glassmorphism (ImageFilter)
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
-import 'package:zenith_app/presentation/screens/qr/reedem_qr_widget.dart';
+
+// Import Provider & Model
 import '../../providers/auth_provider.dart';
+import '../../providers/leaderboard_provider.dart'; 
+import '../../../data/models/user_model.dart';
+
+// Import Halaman & Widget Lain
 import '../../../core/theme/app_theme.dart';
+import '../qr/reedem_qr_widget.dart';
+import '../../providers/history_screen.dart'; 
 
 class UserDashboard extends ConsumerWidget {
   const UserDashboard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Ambil data user dari state
+    // 1. Ambil data User & Leaderboard dari Provider
     final authState = ref.watch(authProvider);
     final user = authState.user;
+    final leaderboardAsync = ref.watch(leaderboardProvider);
 
     return Scaffold(
       backgroundColor: Colors.grey[100], 
       
+      // --- APP BAR ---
       appBar: AppBar(
         title: const Text("ZENITH", style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
         foregroundColor: Colors.black,
-        // --- FITUR 1: TOMBOL LOGOUT ---
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.red),
-            tooltip: "Keluar",
             onPressed: () {
-              // Tampilkan dialog konfirmasi biar ga kepencet
-              showDialog(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text("Konfirmasi"),
-                  content: const Text("Yakin mau keluar akun?"),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text("Batal"),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(ctx); // Tutup dialog
-                        ref.read(authProvider.notifier).logout(); // Panggil fungsi logout provider
-                        Navigator.pushReplacementNamed(context, '/login'); // Lempar ke login
-                      },
-                      child: const Text("Ya, Keluar", style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
-                ),
-              );
+              // Logika Logout
+              ref.read(authProvider.notifier).logout();
+              Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
             },
           )
         ],
       ),
       
+      // --- BODY ---
       body: RefreshIndicator(
         onRefresh: () async {
+          // Refresh data user & leaderboard berbarengan
           await ref.read(authProvider.notifier).refreshUserData();
+          return ref.refresh(leaderboardProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            // --- KARTU STATUS (POINTS) ---
+            // 1. HEADER PROFIL (Nama & Avatar)
+            _buildProfileHeader(user),
+
+            // 2. KARTU STATUS POIN (Update: Pakai Gradient, Tanpa Gambar)
             _buildStatusCard(user?.points ?? 0),
 
             const SizedBox(height: 24),
             
-            const Text(
-              "Quick Actions",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            
+            // 3. QUICK ACTIONS (Tombol Menu)
+            const Text("Quick Actions", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
-
-            // --- TOMBOL-TOMBOL (ROW) ---
             Row(
               children: [
                 Expanded(
@@ -95,7 +84,13 @@ class UserDashboard extends ConsumerWidget {
                     label: "History",
                     icon: Icons.history,
                     iconColor: Colors.orange,
-                    onTap: () {},
+                    onTap: () {
+                      // Navigasi ke Halaman History
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const HistoryScreen()),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -103,7 +98,7 @@ class UserDashboard extends ConsumerWidget {
 
             const SizedBox(height: 24),
 
-            // --- FITUR 2: LEADERBOARD ---
+            // 4. LEADERBOARD SECTION (Real Data API)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -112,33 +107,59 @@ class UserDashboard extends ConsumerWidget {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 TextButton(
-                  onPressed: () {}, // Nanti arahkan ke halaman full leaderboard
-                  child: const Text("Lihat Semua"),
+                  onPressed: () => ref.refresh(leaderboardProvider),
+                  child: const Text("Refresh"),
                 )
               ],
             ),
             
             const SizedBox(height: 8),
 
-            // List Leaderboard (Hardcode dulu biar nongol UI-nya)
-            // Nanti lu ganti pakai ListView.builder dari data API
+            // List Leaderboard
             Container(
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Column(
-                children: [
-                  _buildLeaderboardItem(1, "Raihan", "1,250 Pts", Colors.amber),
-                  const Divider(height: 1),
-                  _buildLeaderboardItem(2, "Siti Aminah", "980 Pts", Colors.grey),
-                  const Divider(height: 1),
-                  _buildLeaderboardItem(3, "Budi Santoso", "850 Pts", Colors.brown),
-                ],
+              child: leaderboardAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (err, stack) => Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(child: Text("Gagal memuat: $err", style: const TextStyle(color: Colors.red))),
+                ),
+                data: (leaders) {
+                  if (leaders.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: Text("Belum ada data.")),
+                    );
+                  }
+                  
+                  return Column(
+                    children: List.generate(leaders.length, (index) {
+                      final item = leaders[index];
+                      // Warna badge untuk Juara 1, 2, 3
+                      Color badgeColor = Colors.grey;
+                      if (index == 0) badgeColor = Colors.amber;
+                      if (index == 1) badgeColor = Colors.blueGrey;
+                      if (index == 2) badgeColor = Colors.brown;
+
+                      return Column(
+                        children: [
+                          _buildLeaderboardItem(index + 1, item.name, "${item.points} Pts", badgeColor),
+                          if (index < leaders.length - 1) const Divider(height: 1),
+                        ],
+                      );
+                    }),
+                  );
+                },
               ),
             ),
             
-            const SizedBox(height: 20), // Spacer bawah
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -147,56 +168,183 @@ class UserDashboard extends ConsumerWidget {
 
   // --- WIDGET HELPER ---
 
-  Widget _buildStatusCard(int points) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppTheme.secondaryColor, Color(0xFF34495E)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 4))
-        ],
-      ),
+  // Header Profil
+  Widget _buildProfileHeader(UserModel? user) {
+    String initial = "?";
+    if (user != null && user.name.isNotEmpty) {
+      initial = user.name[0].toUpperCase();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey.shade200, width: 2),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              initial,
+              style: const TextStyle(
+                fontSize: 24, 
+                fontWeight: FontWeight.bold, 
+                color: AppTheme.primaryColor
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text("Your Impact", style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 8),
               Text(
-                "$points Pts",
-                style: const TextStyle(color: AppTheme.accentColor, fontSize: 32, fontWeight: FontWeight.bold),
+                "Halo, ${user?.name ?? 'Guest'}! 👋",
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white24, borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text("Gold Tier 🥇", style: TextStyle(color: Colors.white)),
-              )
+              const SizedBox(height: 4),
+              const Text(
+                "Let's save the earth today!",
+                style: TextStyle(color: Colors.grey, fontSize: 14),
+              ),
             ],
-          ),
-          CircularPercentIndicator(
-            radius: 45.0,
-            lineWidth: 8.0,
-            percent: 0.7,
-            center: const Icon(Icons.eco, size: 35, color: AppTheme.primaryColor),
-            progressColor: AppTheme.primaryColor,
-            backgroundColor: Colors.white10,
-            circularStrokeCap: CircularStrokeCap.round,
           ),
         ],
       ),
     );
   }
 
+  // Kartu Status (Clean Gradient Style)
+  Widget _buildStatusCard(int points) {
+    return Container(
+      height: 180,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        // [UPDATE] Ganti Image jadi Gradient Hijau-Teal yang fresh
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF11998E), // Hijau Gelap Modern
+            Color(0xFF38EF7D)  // Hijau Terang (Mint)
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF11998E).withOpacity(0.4), // Shadow mengikuti warna dominan
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          )
+        ],
+      ),
+      child: Stack(
+        children: [
+          // Pola Lingkaran Putih Transparan (Biar gak polos banget)
+          Positioned(
+            top: -50,
+            right: -50,
+            child: Container(
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -30,
+            left: -30,
+            child: Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+
+          // Efek Kaca (Blur) - Tetap kita pake biar teks-nya "pop up"
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5), // Blur halus
+                child: Container(
+                  color: Colors.white.withOpacity(0.05), // Layer tipis banget
+                ),
+              ),
+            ),
+          ),
+          
+          // Konten Utama
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      "Your Impact",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "$points Pts",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        shadows: [
+                            Shadow(blurRadius: 10, color: Colors.black26, offset: Offset(0, 2))
+                        ]
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.3))
+                      ),
+                      child: const Text("Gold Tier 🥇", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    )
+                  ],
+                ),
+                CircularPercentIndicator(
+                  radius: 45.0,
+                  lineWidth: 8.0,
+                  percent: 0.7, 
+                  center: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const Icon(Icons.eco, size: 30, color: Color(0xFF11998E)), // Icon ikut warna tema
+                  ),
+                  progressColor: Colors.white,
+                  backgroundColor: Colors.white24,
+                  circularStrokeCap: CircularStrokeCap.round,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Tombol Aksi
   Widget _buildActionButton(BuildContext context, {
     required String label, required IconData icon, required Color iconColor, required VoidCallback onTap
   }) {
@@ -223,6 +371,7 @@ class UserDashboard extends ConsumerWidget {
     );
   }
 
+  // Item List Leaderboard
   Widget _buildLeaderboardItem(int rank, String name, String points, Color badgeColor) {
     return ListTile(
       leading: CircleAvatar(
@@ -233,11 +382,12 @@ class UserDashboard extends ConsumerWidget {
         ),
       ),
       title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-      subtitle: const Text("Student Class A"),
+      subtitle: const Text("User Zenith"),
       trailing: Text(points, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
     );
   }
 
+  // Bottom Sheet Redeem
   void _showRedeemSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
